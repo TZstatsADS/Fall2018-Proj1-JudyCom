@@ -1,12 +1,6 @@
 ---
-title: "R Notebook"
-output:
-  html_document: default
-  html_notebook: default
+title: "Secrets to Happiness from the Crowd"
 ---
-
-#Secrets to Happiness from the Crowd
-
 
 ![](../figs/sunflowers.jpg)
 
@@ -109,6 +103,7 @@ set.seed(1)
 wordcloud2(data = word_count[1:100,], shape = 'star', size = 0.6, backgroundColor = "lightsalmon" )
 
 ```
+
 
 
 
