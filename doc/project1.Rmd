@@ -376,7 +376,7 @@ low_val
 Put together, there are a variety of sources of happiness people receive depending on the groups they belong. But the bulk of happiness comes from the enjoyable time we spend with the people that are important to us and from the achievements we make, which make up the two major types of happiness. With a more detailed examination, the types of happiness people feel can be more subtle and they don't involve the same amount of effort to obtain. It is therefore our own decision to make to go after the right kind of happiness for ourselves when we are sometimes at sea where to find happiness.
 
 
-![](C:/Users/xhmma/Documents/GitHub/Fall2018-Proj1-JudyCom/figs/streetsmiles.jpg)
+![](../figs/streetsmiles.jpg)
 
 ##References
 \newline
