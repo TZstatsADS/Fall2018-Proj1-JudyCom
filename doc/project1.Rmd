@@ -109,6 +109,10 @@ wordcloud2(data = word_count[1:100,], shape = 'star', size = 0.6, backgroundColo
 
 ###Category Frequency
 To answer the question, let's categorize the happy moments into 6 groups, namely, "achievement", "affection", "bonding", "enjoy_the_moment","leisure","nature" and "exercise". Although the category directly indicated by the respondents are generally unavailable, some process has been applied to create the predicted categories for the convenience of our analysis. As can be gleaned from the pie chart, two of the leading categories are "affection" and "achievement", followed by "enjoy_the_moment","bonding" and "leisure", with "nature" and "exercise" being the least mentioned. 
+
+\newline
+\newline
+\newline
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
 # plot a pie chart of predicted category frequency
 pred_cat = hm_data[,c(4:7,9,11)]
