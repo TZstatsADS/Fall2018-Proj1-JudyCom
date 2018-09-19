@@ -5,14 +5,11 @@ output:
   html_notebook: default
 ---
 
+#Secrets to Happiness from the Crowd
 
-<center> <h1>Secrets to Happiness from the Crowd</h1> </center>
-
-<center>
 
 ![](C:/Users/xhmma/Documents/GitHub/Fall2018-Proj1-JudyCom/figs/sunflowers.jpg)
 
-</center>
 
 
 \newline
@@ -264,6 +261,10 @@ hm_data <- hm_data %>%
 
 
 Both dominance(control) and valency(pleasantness) spread around the score of 5 to 6. And The relationship between the two, as imagined, basically takes on a linear form. Though expressing happiness, the emotion we can feel from the phrasing do not necessarily reflect it, as can be seen from the lower tail of the scores of valency.
+
+\newline
+\newline
+\newline
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
 # scatter plot of dominance against valency and the regression fitting line
 ggplot(data=hm_data)+
@@ -280,6 +281,11 @@ ggplot(data=hm_data)+
   stat_smooth(data=subset(hm_data, valency>4 & valency <8),aes(x=valency, y=arousal),method = "lm", formula = y ~ x + I(x^2), size = 1, color = "white")+
   labs(title = "Arousal VS Valency")
 ```
+
+\newline
+\newline
+\newline
+
 ###Category Analysis in VAD with Subjective Groups
 Here we create 3 subjective groups with 1 representing those happy moments with roughly high valency and high arousal, 2 wtih medium valency and low arousal and 3 with relatively low valency and not as low arousal. The groups are divided using K-means clustering. Again, there is not much scientific basis in this grouping as it can be easily eyeballed that there is certainly only one cluster. But the effect will be displayed as follows.
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
@@ -374,10 +380,30 @@ Put together, there are a variety of sources of happiness people receive dependi
 ![](C:/Users/xhmma/Documents/GitHub/Fall2018-Proj1-JudyCom/figs/streetsmiles.jpg)
 
 ##References
+\newline
+\newline
+\newline
+
 1.Images:
+\newline
+\newline
+\newline
+
 http://www.artnet.com/artists/takashi-murakami/the-future-will-be-full-of-smile-for-sure-and-q-q6e254cJOcZQq4FgnVgw2
+\newline
+\newline
+\newline
+
 http://magazine.ucla.edu/depts/quicktakes/street_smiles/
+\newline
+\newline
+\newline
+
 2.Paper:
+\newline
+\newline
+\newline
+
 https://arxiv.org/abs/1801.07746
 
 
