@@ -1,0 +1,1150 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+HappyDB is a corpus of 100,000 crowd-sourced happy moments via Amazon's Mechanical Turk. You can read more about it on https://arxiv.org/abs/1801.07746.
+
+Here, we explore this data set and try to answer the question, "What makes people happy?"
+
+### Step 0 - Load all the required libraries
+
+From the packages' descriptions:
+
++ `tidyverse` is an opinionated collection of R packages designed for data science. All packages share an underlying design philosophy, grammar, and data structures;
++ `tidytext` allows text mining using 'dplyr', 'ggplot2', and other tidy tools;
++ `DT` provides an R interface to the JavaScript library DataTables;
++ `scales` map data to aesthetics, and provide methods for automatically determining breaks and labels for axes and legends;
++ `wordcloud2` provides an HTML5 interface to wordcloud for data visualization;
++ `gridExtra` contains miscellaneous functions for "grid" graphics;
++ `ngram` is for constructing n-grams (â€œtokenizingâ€?), as well as generating new text based on the n-gram structure of a given text input (â€œbabblingâ€?);
++ `Shiny` is an R package that makes it easy to build interactive web apps straight from R;
+
+```{r load libraries, warning=FALSE, message=FALSE}
+
+library(tidyverse)
+library(tidytext)
+library(DT)
+library(scales)
+library(wordcloud2)
+library(gridExtra)
+library(ngram)
+library(shiny) 
+library(igraph)
+library(ggraph) 
+library(wordcloud)
+library(RColorBrewer)
+library(plyr)
+library(Hmisc)
+library(plotrix)
+library(ggpubr)
+library(ggfortify)
+```
+
+### Step 1 - Load the processed text data along with demographic information on contributors
+
+We use the processed data for our analysis and combine it with the demographic information available.
+
+```{r load data, warning=FALSE, message=FALSE}
+hm_data <- read_csv("../output/processed_moments.csv")
+
+urlfile<-'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/data/demographic.csv'
+demo_data <- read_csv(urlfile)
+
+urlfile2<-'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/data/vad.csv'
+vad_data <- read_csv(urlfile2)
+
+urladr<-'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/data/topic_dict/'
+```
+
+### Combine both the data sets and keep the required columns for analysis
+
+We select a subset of the data that satisfies specific row conditions.
+
+```{r combining data, warning=FALSE, message=FALSE}
+hm_data <- hm_data %>%
+  inner_join(demo_data, by = "wid") %>%
+  select(hmid,
+         wid,
+         original_hm,
+         gender, 
+         marital, 
+         parenthood,
+         reflection_period,
+         age, 
+         country, 
+         ground_truth_category,
+         predicted_category,
+         text) %>%
+  mutate(count = sapply(hm_data$text, wordcount)) %>%
+  filter(gender %in% c("m", "f")) %>%
+  filter(marital %in% c("single", "married")) %>%
+  filter(parenthood %in% c("n", "y")) %>%
+  filter(reflection_period %in% c("24h", "3m")) %>%
+  mutate(reflection_period = fct_recode(reflection_period, 
+                                        months_3 = "3m", hours_24 = "24h"))
+```
+
+```{r}
+datatable(hm_data)
+```
+### Create a bag of words using the text data
+
+```{r bag of words, warning=FALSE, message=FALSE}
+bag_of_words <-  hm_data %>%
+  unnest_tokens(word, text)
+
+word_count <- bag_of_words %>%
+  dplyr::count(word, sort = TRUE)
+
+```
+
+### Create bigrams using the text data
+
+```{r bigram, warning=FALSE, message=FALSE}
+hm_bigrams <- hm_data %>%
+  filter(count != 1) %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2)
+
+bigram_counts <- hm_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  dplyr::count(word1, word2, sort = TRUE)
+```
+
+word cloud
+```{r}
+set.seed(1234)
+# figPath = system.file("examples/t.png",package = "wordcloud2")
+wordcloud2(data = word_count, shape = 'star', size = 0.6, backgroundColor = "lightsalmon" )
+# wordcloud(words = word_count$word, freq = word_count$n, min.freq = 1,
+#           max.words=50, random.order=FALSE, rot.per=0.15, 
+#           colors=brewer.pal(12, "Paired"))
+
+```
+
+word frequency
+```{r}
+word_count %>%
+  slice(1:10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  geom_col() +
+  xlab(NULL) +
+  ylab("Word Frequency")+
+  coord_flip()
+
+#try lollipop plot
+word_count_10 = data.frame(word_count %>%
+  slice(1:10) %>%
+  mutate(word = reorder(word, n)))
+names(word_count_10)[2]="count"
+
+ggdotchart(data=word_count_10,x="word", y="count",
+           color = "indianred1",
+           sorting = "descending",
+           rotate = TRUE,
+           dot.size = 9,
+           title = "Most Frequent Words",
+           label = word_count_10$count,
+           font.label = list(color = "black", size = 9,
+                             hjust = 1.5),
+           add = "segments",
+           # add.params = list(color = "lightgray", size = 1.5),
+           ggtheme = theme_pubr() )
+
+
+```
+
+bigram
+```{r}
+bigram_graph <- bigram_counts %>%
+  slice(1:50) %>%
+  graph_from_data_frame()
+    
+  set.seed(123)
+    
+  x <- grid::arrow(type = "closed", length = unit(.1, "inches"))
+    
+  ggraph(bigram_graph, layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                   arrow = x, end_cap = circle(.05, 'inches')) +
+    geom_node_point(color = "lightgreen", size = 3) +
+    geom_node_text(aes(label = name), repel = TRUE) +
+    theme_void()
+```
+
+
+```{r}
+atrs <- c("gender", "marital", "parenthood", "reflection_period")
+temp = list()
+for(i in 1:length(atrs)){
+  temp[[i]] <- bag_of_words %>%
+      dplyr::count(!!as.symbol(atrs[i]),word) %>%
+      group_by(!!as.symbol(atrs[i])) %>%
+      mutate(proportion = n / sum(n)) %>% 
+      select(-n) %>% 
+      spread(!!as.symbol(atrs[i]), proportion)
+}
+
+comp_of_prop<-function(tmp){
+  ggplot(data = tmp, 
+             aes_string(x = colnames(tmp)[2], y = colnames(tmp)[3]),
+             color = abs(colnames(tmp)[3] - colnames(tmp)[2])) +
+      geom_abline(color = "gray40", lty = 2) +
+      geom_jitter(alpha = 0.1, size = 1, width = 0.3, height = 0.3) +
+      geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+      scale_x_log10(labels = percent_format()) +
+      scale_y_log10(labels = percent_format()) +
+      scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
+      theme(legend.position="none")
+}
+  
+lapply(temp, FUN = comp_of_prop)
+
+# ggarrange(sct[[1]],sct[[2]], sct[[3]], sct[[4]], common.legend=FALSE,legend = 'right', nrow=2, ncol=2)      
+    
+```
+
+```{r}
+  temp2 <- bag_of_words %>%
+      dplyr::count(country,word) %>%
+      group_by(country) %>%
+      filter(country %in% c("USA", "IND"))%>%
+      mutate(proportion = n / sum(n)) %>% 
+      select(-n) %>% 
+      spread(country, proportion)
+
+
+  ggplot(data = temp2, 
+             aes_string(x = colnames(temp2)[2], y = colnames(temp2)[3]),
+             color = abs(colnames(temp2)[3] - colnames(temp2)[2])) +
+      geom_abline(color = "gray40", lty = 2) +
+      geom_jitter(alpha = 0.1, size = 1, width = 0.3, height = 0.3) +
+      geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+      scale_x_log10(labels = percent_format()) +
+      scale_y_log10(labels = percent_format()) +
+      scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
+      theme(legend.position="none")
+  
+```
+
+bigram
+```{r}
+  # selectedBigram <- reactive({
+  #   list(var = input$factor)
+  # })
+
+temp3 = list()
+
+pre_order <- function(chrct){
+  hm_bigrams %>%
+      dplyr::count(!!as.symbol(chrct), bigram, sort = TRUE) %>%
+      group_by(!!as.symbol(chrct)) %>%
+      top_n(10) %>%
+      ungroup() %>%
+      mutate(bigram = reorder(bigram, n))
+}
+
+temp3 = alply( as.matrix(atrs,ncol=1,nrow=4),1,pre_order)
+
+# for(i in 1:length(atrs)){
+#   hm_bigrams %>%
+#       dplyr::count(!!as.symbol(atrs[i]), bigram, sort = TRUE) %>%
+#       group_by(!!as.symbol(atrs[i])) %>%
+#       top_n(10) %>%
+#       ungroup() %>%
+#       mutate(bigram = reorder(bigram, n)) 
+# }
+
+comp_of_bigram<-function(tmp){
+  ggplot(data = tmp, 
+             aes(bigram, n, fill = !!as.symbol(colnames(tmp)[1]))) +
+      geom_col(show.legend = FALSE) +
+      facet_wrap(as.formula(paste("~", colnames(tmp)[1])), ncol = 2, scales = "free") +
+      coord_flip()
+}
+
+plt = lapply(temp3, FUN = comp_of_bigram)
+
+ggarrange(plt[[1]],plt[[2]], plt[[3]], plt[[4]], plt, common.legend=FALSE,legend = 'right', nrow=2, ncol=2)
+# for (i in length(atrs)){
+#   hm_bigrams %>%
+#       count(gender, bigram, sort = TRUE) %>%
+#       group_by(gender) %>%
+#       top_n(10) %>%
+#       ungroup() %>%
+#       mutate(bigram = reorder(bigram, n)) %>%
+#       ggplot(aes(bigram, n, fill = gender)) +
+#       geom_col(show.legend = FALSE) +
+#       facet_wrap(as.formula(paste("~", "gender")), ncol = 2, scales = "free") +
+#       coord_flip()
+# }
+#   
+  # output$bar <- renderPlot({
+    
+  # })
+```
+
+pie chart of countries
+```{r}
+countries = sort(table(demo_data$country), decreasing = TRUE)
+main_countries = c(countries[1:2],sum(countries[-c(1,2)]))
+names(main_countries)=c("USA", "India","Others")
+main_countries = round(main_countries/sum(main_countries), digits = 3)
+# 
+# lp<-pie3D(main_countries,radius=0.9,labels=paste(names(main_countries),":",main_countries,sep=""),  main="3D Pie Chart of Countries")
+# lp=lp+0.4
+pie3D(main_countries,labels=paste(names(main_countries),sep=""),radius = 0.9, main="Countries of Respondents ",col=c("brown","orange","yellow"), labelcex = 1.5)
+
+# pieval<-c(2,4,6,8)
+#  pielabels<-
+#   c("We hate\n pies","We oppose\n  pies","We don't\n  care","We just love pies")
+#  # grab the radial positions of the labels
+# lp<-pie3D(pieval,radius=0.9,labels=pielabels,explode=0.1,main="3D PIE OPINIONS")
+#  # lengthen the last label and move it to the left
+#  pielabels[4]<-"We cannot survive without our pies"
+#  lp[4]<-4.8
+#  # specify some new colors
+#  pie3D(pieval,radius=0.9,labels=pielabels,explode=0.1,main="3D PIE OPINIONS",
+#   col=c("brown","#ddaa00","pink","#dd00dd"),labelpos=lp)
+
+```
+specify ordinal number of indians
+
+
+```{r}
+temp4 <- hm_bigrams %>%
+  dplyr::count(country, bigram, sort = TRUE) %>%
+  group_by(country) %>%
+  filter(country %in% c("USA", "IND"))%>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(bigram = reorder(bigram, n))
+      
+
+ggplot(data = temp4, 
+       aes(bigram, n, fill = country)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(as.formula(paste("~", "country")), ncol = 2, scales = "free") +
+  coord_flip()
+```
+
+
+
+
+add predicted category and vad data to the hm_data
+```{r}
+hm_data <- hm_data %>%
+  inner_join(vad_data, by = "hmid") %>%
+  select(hmid,
+         wid,
+         original_hm,
+         gender, 
+         marital, 
+         parenthood,
+         reflection_period,
+         age, 
+         country, 
+         ground_truth_category,
+         predicted_category,
+         text,
+         valency,
+         dominance,
+         arousal)
+```
+
+```{r}
+pred_cat = hm_data[,c(4:7,9,11)]
+pred_cat$predicted_category = factor(hm_data$predicted_category, 
+                                     levels = rev(c("achievement", "affection", "bonding",
+                                                "enjoy_the_moment","leisure","nature","exercise")))
+
+ggplot(data = pred_cat)+
+  geom_bar(aes(x=predicted_category))+
+  # facet_wrap(as.formula(paste("~", "reflection_period")), ncol = 2, scales = "free")+
+  coord_flip()+
+  labs(title = "Predicted Category Frequency", x = "Category", y = "Frequency")
+  # theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+pred_cat_table = as.data.frame(sort(table(pred_cat$predicted_category), decreasing = TRUE))
+names(pred_cat_table)[1]="category"
+
+ggplot(data = pred_cat_table, aes(x=factor(1), y=Freq, fill=category))+
+  geom_bar(width=1, stat="identity")+
+  # facet_wrap(as.formula(paste("~", "reflection_period")), ncol = 2, scales = "free")+
+  coord_polar(theta = "y")+
+  labs(title = "Predicted Category Frequency", x = "Category", y = "Frequency")
+  # theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+try pie chart!
+
+```{r}
+
+```
+
+
+
+```{r}
+# atrs <- c("gender", "marital", "parenthood", "reflection_period")
+# 
+# for(atr in atrs){
+#   ggplot(data = pro_data)+
+#   geom_bar(aes(x=predicted_category, fill = !!as.symbol(atr)))+
+#   facet_wrap(as.formula(paste("~", atr)), ncol = 2, scales = "free")+
+#   labs(title = "Predicted Category Frequency", x = "Category", y = "Frequency")+
+#   theme(axis.text.x = element_text(angle = 60, hjust = 1))
+# }
+
+# 
+# comp_cat<-function(tmp){
+#   ggplot(data = pred_cat)+
+#   geom_bar(aes(x=predicted_category, fill=!!as.symbol(tmp)))+
+#   facet_wrap(as.formula(paste("~", tmp)), ncol = 2, scales = "free")+
+#   coord_flip()+
+#   labs(title = "Predicted Category", x = "Category", y = "Frequency")
+#   #theme(axis.text.x = element_text(angle = 60, hjust = 1))
+# }
+# lapply(as.list(atrs),FUN = comp_cat)
+#   
+# #as.matrix(atrs,ncol=1,nrow=4)
+# 
+# cat_box<-function(tmp){
+#   ggplot(data = pred_cat)+
+#   geom_bar(aes(x=predicted_category, fill=!!as.symbol(tmp)),position = "dodge", stat="identity")
+#   #facet_wrap(as.formula(paste("~", tmp)), ncol = 2, scales = "free")+
+#   # coord_flip()+
+#   # labs(title = "Predicted Category", x = "Category", y = "Frequency")
+#   #theme(axis.text.x = element_text(angle = 60, hjust = 1))
+# }
+# # lapply(as.list(atrs),FUN = cat_box)
+# 
+# 
+# # comment out above
+
+atrs <- c("gender", "marital", "parenthood", "reflection_period")
+temp0 = list()
+# for(i in 1:length(atrs)){
+#   temp0[[i]] <- split(pred_cat, f = pred_cat[,i])
+# }
+# 
+# pred_cat_ui = pred_cat%>%
+#   select(country,
+#          predicted_category)%>%
+#   filter(country %in% c("USA", "IND"))
+# 
+# temp0[[5]] <- split(pred_cat_ui, f = pred_cat_ui[,1])
+#       
+# atrs = c(atrs, "country")      
+# names(temp0) = atrs
+
+sql_cat = list()
+for (i in 1:length(atrs)){
+  sql_cat[[i]] = pred_cat%>%
+                   dplyr::count(!!as.symbol(atrs[i]),predicted_category)%>%
+                   group_by(!!as.symbol(atrs[i]),predicted_category)
+}
+
+sql_cat[[5]] = pred_cat%>%
+  dplyr::count(country,predicted_category)%>%
+  group_by(country,predicted_category)%>%
+  filter(country %in% c("USA","IND"))
+
+atrs[5]="country"
+names(sql_cat)=atrs
+
+divi <-function(vec,df){
+  vec1 = as.vector(vec)
+  if (as.character(vec1[1])==as.character(df[1,1])){
+    vec1[3]=as.numeric(vec1[3])/as.numeric(df[1,2])
+  }
+  else{
+    vec1[3]=as.numeric(vec1[3])/as.numeric(df[2,2])
+  }
+  return(vec1[3])
+}
+cnt_to_prop<-function(df){
+  df = data.frame(df)
+  df_sum = df%>%
+    group_by(!!as.symbol(names(df)[1]))%>%
+    dplyr::summarise(total = sum(n, na.rm = TRUE))
+  df_sum = data.frame(df_sum)
+  props = round(as.numeric(apply(df,1,divi,df_sum)),digits = 4)
+  df[,3] = props
+  names(df)[3]="proportion"
+  return(df)
+}
+gen = data.frame(sql_cat[[1]])
+
+#try
+ttt = data.frame(data.frame(sql_cat[[1]])%>%
+    group_by(gender)%>%
+    dplyr::summarise(total = sum(n)))
+    
+cnt_to_prop(data.frame(sql_cat[[1]]))
+    #summarise(total = sum(n))
+#!!as.symbol(names(sql_cat[[1]])[1])
+
+bi_cat<-function(df){
+  df = cnt_to_prop(df)
+  ggplot(data=df, aes(x=!!as.symbol(names(df)[2]),y=!!as.symbol(names(df)[3])))+
+    geom_bar(aes(fill=!!as.symbol(names(df)[1])), position = "dodge", stat="identity")+
+    theme(axis.text.x = element_text(angle = 60, hjust = 1))
+}
+
+lapply(sql_cat, FUN = bi_cat )
+```
+try compare in the same graph 
+
+```{r}
+# pred_cat_ui = pred_cat%>%
+#   select(country,
+#          predicted_category)%>%
+#   filter(country %in% c("USA", "IND"))
+# 
+# ggplot(data = pred_cat_ui)+
+#   geom_bar(aes(x=predicted_category, fill=country))+
+#   facet_wrap(as.formula(paste("~", "country")), ncol = 2, scales = "free")+
+#   coord_flip()+
+#   labs(title = "Predicted Category", x = "Category", y = "Frequency")
+#   # theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+dictionary
+
+#try out dictionary count
+```{r}
+# lexicon = c("greatest" ,"glory" , "rising")
+# sen = "Our greatest greatest glory is not in never falling, but in rising every time we fall #confucius #entrepreneurship"
+# wordss = strsplit(sen," ")
+# 
+# sum(wordss[[1]] %in% lexicon) #returns the number of words that matches lexicon
+# 
+# sum(wd %in% dict_list[[1]][,1])
+```
+
+
+```{r}
+urladr<-'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/data/topic_dict/'
+dict_vec = c("entertainment", "exercise", "family", "food", "people", "pets","school", "shopping", "work")
+
+load_dict<-function(dict){
+  return(read.csv(paste(urladr,dict,"-dict.csv", sep = ""),header = FALSE))
+}
+# matrix(dict_vec,nrow=length(dict_vec),ncol=1)
+
+dict_list = plyr::alply(matrix(dict_vec,nrow=length(dict_vec),ncol=1),1,load_dict)
+names(dict_list) = dict_vec
+
+txt = as.vector(hm_data$text)
+txt = paste(txt, collapse = " ")
+wd = strsplit(txt, split = " ")[[1]]
+
+txt_table = table(wd)
+txt_df = as.data.frame(txt_table)
+
+count_key<-function(key, cnt, txt_df){
+  if (key %in% txt_df[,1]){
+    return(txt_df[which(txt_df[,1]==key),2])
+  }
+  else{
+    return(0)
+  }
+}
+
+count_dict<-function(df, txt_df){
+  cnt = 0
+  cnt_vec = apply(as.matrix(df), 1, count_key, cnt, txt_df)
+  return(sum(cnt_vec))
+}
+
+dict_count = sort(sapply(dict_list, FUN = count_dict, txt_df), decreasing = TRUE)
+  
+# dict_count = sort(sapply(dict_list, FUN = count_dict, txt_df), decreasing = TRUE)
+dict_expand = as.data.frame(rep(names(dict_count),dict_count))
+names(dict_expand)="words"
+dict_expand$words <- factor(dict_expand$words, levels = rev(names(dict_count)))
+
+ggplot(data = dict_expand)+
+  geom_bar(aes(x=words),fill = "darkorchid1")+
+  labs(x="Dictionary", y="Frequency", title = "Frequency of Words in Each Topic")+
+  coord_flip()
+
+```
+try sth similar to pie chart
+1.lollipop chart: ggdotchart
+
+```{r}
+atrs <- c("gender", "marital", "parenthood", "reflection_period")
+temp5 = list()
+for(i in 1:length(atrs)){
+  temp5[[i]] <- bag_of_words %>%
+      dplyr::count(!!as.symbol(atrs[i]),word) %>%
+      group_by(!!as.symbol(atrs[i])) %>%
+      mutate(cnt = n) %>% 
+      select(-n)  
+      # spread(!!as.symbol(atrs[i]),value)
+}
+
+temp5[[5]] <- bag_of_words%>%
+      dplyr::count(country,word) %>%
+      group_by(country) %>%
+      filter(country %in% c("USA","IND"))%>%
+      mutate(cnt = n) %>% 
+      select(-n)  
+      
+atrs = c(atrs, "country")      
+names(temp5) = atrs
+#temp5 is a list of 4 dataframes counting words in each group
+
+# 
+# txt_table = table(wd)
+# txt_df = as.data.frame(txt_table)
+# 
+# count_key<-function(key, cnt, txt_df){
+#   if (key %in% txt_df[,1]){
+#     return(txt_df[which(txt_df[,1]==key),2])
+#   }
+#   else{
+#     return(0)
+#   }
+# }
+# 
+# count_dict<-function(df){
+#   cnt = 0
+#   cnt_vec = apply(as.matrix(df), 1, count_key, cnt, txt_df)
+#   return(sum(cnt_vec))
+# }
+
+
+pre_split<-function(df){
+  return(split(df[,2:3],f=df[,1]))
+}
+#split a dataframe into a list of 2 dataframes
+
+atr_lists=lapply(temp5, FUN = pre_split)
+#atr_lists is a list of 4 lists of 2 dataframes counting words in each group
+
+
+comp_dict<-function(df){
+  txt_df = df
+  dict_cnt = sort(sapply(dict_list, FUN = count_dict, as.data.frame(txt_df)), decreasing = TRUE)
+  return(dict_cnt)
+}
+
+# co_dict<-function(df){
+#   txt_df = df
+#   dict_cnt = sort(sapply(dict_list, FUN = c_dict, as.data.frame(txt_df)), decreasing = TRUE)
+#   return(dict_cnt)
+# }
+
+#trial
+# comp_dict(atr_lists[[4]][[1]])
+
+sublist<-function(lst){
+  dict_cnt_l = lapply(lst, FUN = comp_dict)
+  return(dict_cnt_l)
+}
+# 
+# slist<-function(lst){
+#   dict_cnt_l = lapply(lst, FUN = co_dict)
+#   return(dict_cnt_l)
+# }
+# 
+# co_output = lapply(atr_lists, FUN = slist)
+
+#lists of 8 tables:same results!
+comp_output = lapply(atr_lists, FUN = sublist)
+
+tblst_to_df<-function(tblst){
+  nm= NA
+  
+  df1=as.data.frame(rep(names(tblst[[1]]),tblst[[1]]))
+  names(df1)="dicts"
+  df1$gp = names(tblst)[1]
+  df2=as.data.frame(rep(names(tblst[[2]]),tblst[[2]]))
+  names(df2)="dicts"
+  df2$gp = names(tblst)[2]
+  df = rbind(df1, df2)
+  
+  if(names(tblst)[1]=="f"){
+    nm=atrs[1]
+  } 
+  else if(names(tblst)[1]=="married"){
+    nm=atrs[2]
+  } 
+  else if(names(tblst)[1]=="n"){
+    nm=atrs[3]
+  } 
+  else if(names(tblst)[1]=="hours_24"){
+    nm=atrs[4]
+  }
+  else if(names(tblst)[1]=="IND"){
+    nm=atrs[5]
+  }
+    
+  names(df)[2]=nm
+  return(df)
+}
+
+#for each of the 4 lists in comp_output
+comp_dict_plot<-function(lst2){
+  df_mix = tblst_to_df(lst2)
+  df_mix$dicts = factor(df_mix$dicts,levels = rev(names(comp_output[[1]][[1]])))
+  
+  ggplot(data = df_mix)+
+  geom_bar(aes(x=dicts, fill=!!as.symbol(names(df_mix)[2])))+
+  facet_wrap(as.formula(paste("~", names(df_mix)[2])), ncol = 2, scales = "free")+
+  coord_flip()+
+  labs(title = "Frequency of Words in Each Topic", x = "Dictionary", y = "Frequency")+
+  scale_fill_manual(values=c("#CC6666", "#66CC99"))
+  # theme(axis.text.x = element_text(angle = 60, hjust = 1))
+}
+  
+lapply(comp_output, FUN = comp_dict_plot)
+# length(plt)
+# 
+# ggarrange(plt[[1]],plt[[2]], plt[[3]], plt[[4]], plt[[5]],common.legend=FALSE,legend = 'right', nrow=5)
+```
+try another form
+
+vad
+valence (the pleasantness of a stimulus): 
+arousal (the intensity of emotion provoked by a stimulus),
+dominance (the degree of control exerted by a stimulus) 
+```{r}
+ggplot(data=hm_data)+
+  geom_jitter(aes(x=valency, y=dominance), size =0.1, color = "antiquewhite4")+
+  stat_smooth(aes(x=valency, y=dominance),method = "lm", formula = y ~ x, size = 1)
+```
+
+```{r}
+ggplot(data=hm_data)+
+  geom_jitter(aes(x=valency, y=arousal), size =0.1, color = "antiquewhite4")+
+  stat_smooth(aes(x=valency, y=arousal),method = "lm", formula = y ~ x + I(x^2), size = 1)
+
+# reg = lm(arousal~valency+I((valency)^2), data = hm_data)
+# summary(reg)
+```
+
+
+
+split arousal~valency into high-low 4 groups and anayze attributes ??ignore
+```{r}
+# val_avg=mean(hm_data$valency,na.rm = TRUE)
+# aro_avg=mean(hm_data$arousal,na.rm = TRUE)
+# ggplot(data=hm_data)+
+#   geom_point(aes(x=valency, y=arousal), size =0.1)+
+#   geom_vline(xintercept = val_avg, color = "red")+
+#   geom_hline(yintercept = aro_avg, color = "red")
+```
+? explore why there is a quadratic trend
+
+? why happy moments expressed whith low valency
+one man's meat is another man's poison
+low_val: ppl in adversity
+happiness is relative
+
+?high valency: universal happiness?
+
+?low arousal: happiness can be very simple and subtle
+```{r}
+low_val = head(hm_data[order(hm_data$valency,decreasing = FALSE),]$original_hm,10)
+low_val
+# happiness arise from pain
+
+high_val=  head(hm_data[order(hm_data$valency,decreasing = TRUE),]$original_hm,10)
+high_val
+#real happiness
+
+low_aro = head(hm_data[order(hm_data$arousal,decreasing = FALSE),]$original_hm,10)
+low_aro
+#
+# mid_val_high_aro = (hm_data%>%
+#   filter(arousal>6)%>%
+#   filter(valency<5.1 & valency>4.8))$original_hm
+# mid_val_high_aro
+```
+
+
+not very interesting
+```{r}
+# hm_vad = hm_data[!is.na(hm_data$valency) & !is.na(hm_data$arousal),]
+# coord = list()
+# coord[[1]] = hm_vad[hm_vad$valency>val_avg & hm_vad$arousal>aro_avg,]
+# coord[[2]] = hm_vad[hm_vad$valency<val_avg & hm_vad$arousal>aro_avg,]
+# coord[[3]] = hm_vad[hm_vad$valency<val_avg & hm_vad$arousal<aro_avg,]
+# coord[[4]] = hm_vad[hm_vad$valency>val_avg & hm_vad$arousal<aro_avg,]
+# 
+# est<-function(df){
+#   gender_prop = sum(df$gender=="m", na.rm = TRUE)/sum(df$gender=="f", na.rm = TRUE)
+#   marital_prop = sum(df$marital=="single", na.rm = TRUE)/sum(df$marital=="married", na.rm = TRUE)
+#   parenthood_prop = sum(df$parenthood=="n", na.rm = TRUE)/sum(df$parenthood=="y", na.rm = TRUE)
+#   reflection_prop= sum(df$reflection_period=="hours_24",na.rm=TRUE)/sum(df$reflection_period=="months_3", na.rm = TRUE)
+#   return(c(gender_prop,marital_prop,parenthood_prop,reflection_prop))
+# }
+# 
+# coord_prop = lapply(coord, FUN = est)
+# comp_coord = matrix(NA,ncol=4,nrow=4)
+# for(i in 1:length(coord_prop)){
+#   comp_coord[i,] = coord_prop[[i]]
+# }
+# colnames(comp_coord) = atrs[1:4]
+# comp_coord = as.data.frame(comp_coord)
+# comp_coord
+# est(hm_vad)
+
+```
+
+```{r}
+# age_int = as.integer(age_vad$age)
+# age_table = table(age_int)
+# 
+# hist(age_int)
+# ggplot(data=age_vad)+
+#   geom_point(aes(x=age, y=dominance), size = 0.1)
+```
+
+#not interesting
+```{r}
+# urlfile3<-'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/data/senselabel.csv'
+# sense_data <- read_csv(urlfile3)
+# 
+# pos_table = sort(table(sense_data$POS), decreasing = TRUE)
+# sense_data$POS= factor(sense_data$POS,levels =names(pos_table))
+# ggplot(data = sense_data)+
+#      geom_bar(aes(x=POS))
+```
+
+boxplot
+```{r}
+#eg
+# Degrees <- factor(ranSamples$DegLevel, levels = unique(ranSamples$DegLevel))
+# ggplot(ranSamples, aes(x=Degrees, y=MedianIncome, fill=Degrees ) ) +  
+#   geom_boxplot(notch = FALSE, outlier.colour="#CC6600") +
+#   scale_fill_manual(name = "", values = c("#00BFFF", "#66FF00", "#CC0033")) +
+#   theme(panel.background = element_rect(fill = 'white' )) +
+#   ggtitle("Comparing Income of Degrees Holders")  
+```
+
+```{r}
+atrs_matrix = as.matrix(atrs[-5])
+
+comp_box<-function(chrct){
+  ggplot(hm_data,aes(x=!!as.symbol(chrct), y = valency, fill = !!as.symbol(chrct)))+
+  geom_boxplot(notch = FALSE, outlier.colour="#CC6600")+
+  scale_fill_manual(name = "", values = c("#00BFFF", "#66FF00")) +
+  theme(panel.background = element_rect(fill = 'white' )) +
+  ggtitle(paste("Comparing Valency between ", capitalize(chrct)))
+}
+
+plt = apply(atrs_matrix,1,comp_box)
+ggarrange(plt[[1]],plt[[2]], plt[[3]], plt[[4]], plt, common.legend=FALSE,legend = 'right', nrow=2, ncol=2)
+
+country_vad = hm_data%>%
+  select(country,
+         valency,
+         arousal,
+         dominance)%>%
+  filter(country %in% c("USA","IND"))
+
+ggplot(country_vad,aes(x=country, y = valency, fill = country))+
+  geom_boxplot(notch = FALSE, outlier.colour="#CC6600")+
+  scale_fill_manual(name = "", values = c("#00BFFF", "#66FF00")) +
+  theme(panel.background = element_rect(fill = 'white' )) +
+  ggtitle(paste("Comparing Valency between Country"))
+```
+lower tail in male, esp usa
+
+~arousal
+try violin plot
+try save violin to age~vad
+5 violins can comment out
+```{r}
+# comp_violin<-function(chrct){
+#   ggplot(hm_data,aes(x=!!as.symbol(chrct), y = arousal))+
+#     geom_violin(aes(fill=!!as.symbol(chrct)))+
+#     ggtitle(paste("Comparing Valency between ", capitalize(chrct)))
+# }
+# 
+# apply(atrs_matrix,1,comp_violin)
+# 
+# ggplot(country_vad,aes(x=country, y = arousal))+
+#  geom_violin(aes(fill = country))
+```
+
+```{r}
+vad_data <- read_csv(urlfile2)
+vad_data = data.frame(vad_data)
+vad_data = cbind(vad_data[,1:2],vad_data$arousal,vad_data$dominance)
+vad_ori = stats::na.omit(vad_data)
+vad = vad_ori
+vad[,2:4]= scale(vad_ori[,2:4])
+# Determine number of clusters
+hmid_vad = vad[,1]
+va = vad[,2:3]
+wss <- (nrow(va)-1)*sum(apply(va,2,var))
+wss
+for (i in 2:15) wss[i] <- sum(kmeans(va, 
+  	centers=i)$withinss)
+wss_df = data.frame(number_of_clusters = 1:15, wss=wss)
+ggplot(data = wss_df,aes(number_of_clusters, wss))+
+  geom_line()
+# plot(1:15, wss, type="b", xlab="Number of Clusters",
+#   ylab="Within groups sum of squares")
+
+# K-Means Cluster Analysis
+fit <- kmeans(va, 3) # 5 cluster solution
+# get cluster means 
+aggregate(va,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+km_vad <- data.frame(vad_ori, fit$cluster)
+head(km_vad)
+names(km_vad)[3:5] = c("arousal","dominance","subjective_group")
+km_vad$subjective_group = as.factor(km_vad$subjective_group)
+
+head(va)
+# plot(km_vad[,2:3], col = km_vad$cluster)
+ggplot(data = km_vad,aes(x=valency,y=arousal))+
+  geom_point()+
+  geom_point(aes(colour = subjective_group))
+# km_vad
+vad_age = data.frame(hm_data)[,-c(13,14,15)]%>%
+  inner_join(km_vad, by="hmid")%>%
+  select(hmid,
+         age,
+         valency,
+         arousal,
+         dominance,
+         subjective_group)
+vad_age$age = as.numeric(vad_age$age)
+vad_age = stats::na.omit(vad_age)
+vad_age = vad_age[vad_age$age < 100,]
+
+ggplot(vad_age,aes(x=subjective_group, y = age))+
+ geom_violin(aes(fill = subjective_group))
+
+# ?summarise
+# 
+# mean_ages = vad_age%>%
+#   group_by(subjective_group)%>%
+#   dplyr::summarise(mean = mean(age), median=median(age), var = var(age), )
+# mean_ages
+# head(vad_age)
+```
+
+kmeans eg
+```{r}
+# require(graphics)
+# 
+# # a 2-dimensional example
+# x <- rbind(matrix(rnorm(100, sd = 0.3), ncol = 2),
+#            matrix(rnorm(100, mean = 1, sd = 0.3), ncol = 2))
+# colnames(x) <- c("x", "y")
+# (cl <- kmeans(x, 2))
+# plot(x, col = cl$cluster)
+# points(cl$centers, col = 1:2, pch = 8, cex = 2)
+# 
+# # sum of squares
+# ss <- function(x) sum(scale(x, scale = FALSE)^2)
+# 
+# ## cluster centers "fitted" to each obs.:
+# fitted.x <- fitted(cl);  head(fitted.x)
+# resid.x <- x - fitted(cl)
+# 
+# ## Equalities : ----------------------------------
+# cbind(cl[c("betweenss", "tot.withinss", "totss")], # the same two columns
+#          c(ss(fitted.x), ss(resid.x),    ss(x)))
+# stopifnot(all.equal(cl$ totss,        ss(x)),
+# 	  all.equal(cl$ tot.withinss, ss(resid.x)),
+# 	  ## these three are the same:
+# 	  all.equal(cl$ betweenss,    ss(fitted.x)),
+# 	  all.equal(cl$ betweenss, cl$totss - cl$tot.withinss),
+# 	  ## and hence also
+# 	  all.equal(ss(x), ss(fitted.x) + ss(resid.x))
+# 	  )
+# 
+# kmeans(x,1)$withinss # trivial one-cluster, (its W.SS == ss(x))
+# 
+# ## random starts do help here with too many clusters
+# ## (and are often recommended anyway!):
+# (cl <- kmeans(x, 5, nstart = 25))
+# plot(x, col = cl$cluster)
+# points(cl$centers, col = 1:5, pch = 8)
+# plot(km_vad[,2:3], col = fit$cluster)
+# head(vad)
+```
+
+```{r}
+cat_vad = hm_data%>%
+  inner_join(km_vad, by="hmid")%>%
+  select(hmid,
+         predicted_category,
+         subjective_group)
+cat_vad_cnt = data.frame(cat_vad%>%
+  group_by(subjective_group)%>%
+  dplyr::count(predicted_category))
+
+cat_vad_cnt[,1]=factor(cat_vad_cnt[,1])
+head(cat_vad_cnt)
+
+cnt_lst = split(cat_vad_cnt, f=cat_vad_cnt$subjective_group)
+cnt_lst
+cnt_df = NULL
+for(i in 1:3){
+  cnt_lst[[i]]$proportion = round(cnt_lst[[i]]$n/sum(cnt_lst[[i]]$n),4)
+  cnt_lst[[i]] = cnt_lst[[i]][,-3]
+  names(cnt_lst[[i]])[1]="group"
+  cnt_df = rbind(cnt_df, cnt_lst[[i]])
+}
+cnt_df$predicted_category = factor(cnt_df$predicted_category, levels = rev(c("achievement", "affection", "bonding", "enjoy_the_moment","leisure","nature","exercise")))
+
+ggplot(data = cnt_df, aes(x=predicted_category,y=proportion,fill=group))+
+  geom_bar(stat = "identity")+
+  facet_wrap(as.formula("~group"), ncol = 3)+
+  coord_flip()+
+  labs(title = "Proportion of Categories in Each Group", x = "Predicted Category", y = "Proportion")
+```
+
+
+```{r}
+vad_bag = data.frame(bag_of_words)%>%
+  inner_join(km_vad, by = "hmid")%>%
+  select(hmid, word, subjective_group)
+
+wc_vad = data.frame(vad_bag%>%
+  group_by(subjective_group)%>%
+  dplyr::count(word))
+head(wc_vad)
+class(wc_vad)
+wc_vad_lists = pre_split(wc_vad)
+length(wc_vad_lists)
+# head(wc_vad_lists)
+
+op = sublist(wc_vad_lists)
+# op
+
+op_df_lst = lapply(op, as.data.frame)
+# op_df_lst
+
+op_df_lst[[1]]$dicts = row.names(op_df_lst[[1]])
+ op_df_lst
+op_df = NULL
+
+for (i in 1:3){
+  op_df_lst[[i]]$dicts = row.names(op_df_lst[[i]])
+  op_df_lst[[i]]$group = i
+  names(op_df_lst[[i]])[1]="proportion"
+  op_df_lst[[i]]$proportion = round(op_df_lst[[i]]$proportion/sum(op_df_lst[[i]]$proportion),digits = 4)
+  op_df = rbind(op_df,op_df_lst[[i]])
+}
+op_df_lst
+op_df
+op_df$group=as.factor(op_df$group)
+op_df$dicts = factor(op_df$dicts,levels = rev(names(comp_output[[1]][[1]])))
+
+  # df_op = tblst_to_df(op)
+  # names(df_op)[2] = "group"
+  # df_op$dicts = factor(df_op$dicts,levels = rev(names(comp_output[[1]][[1]])))
+  # 
+  ggplot(data = op_df,aes(x=dicts,y=proportion, fill=group))+
+  geom_bar(stat = "identity")+
+  facet_wrap(as.formula("~group"), ncol = 3)+
+  coord_flip()+
+  labs(title = "Proportion of Topic Words in Each Group", x = "Topic", y = "Relative Frequency")
+  # scale_fill_manual(values=c("#CC6666", "#66CC99","pink"))
+  
+  # theme(axis.text.x = element_text(angle = 60, hjust = 1))
+  # }
+
+```
+
+```{r}
+# library(topicmodels)
+# data("AssociatedPress")
+# AssociatedPress
+# ap_lda <- LDA(AssociatedPress, k = 2, control = list(seed = 1234))
+# ap_lda
+# 
+# ?LDA
+# 
+# ap_topics <- tidy(ap_lda, matrix = "beta")
+# ap_topics
+# 
+# ap_top_terms <- ap_topics %>%
+#   group_by(topic) %>%
+#   top_n(10, beta) %>%
+#   ungroup() %>%
+#   arrange(topic, -beta)
+# head(ap_top_terms)
+# 
+# ap_top_terms %>%
+#   mutate(term = reorder(term, beta)) %>%
+#   ggplot(aes(term, beta, fill = factor(topic))) +
+#   geom_col(show.legend = FALSE) +
+#   facet_wrap(~ topic, scales = "free") +
+#   coord_flip()
+# 
+# head(ap_top_terms %>%
+#   mutate(term = reorder(term, beta))) 
+```
+
+kmeans cv draft 
+```{r}
+# wss <- (nrow(va)-1)*sum(apply(va,2,var))
+# for (i in 2:15) wss[i] <- sum(kmeans(va,
+#   	centers=i)$withinss)
+# wss_df = data.frame(number_of_clusters = 1:15, wss=wss)
+# ggplot(data = wss_df,aes(number_of_clusters, wss))+
+#   geom_line()+
+#   labs(x="Number of Clusters", y="Within Cluster Sum of Squares")
+#no test data: Cross Validation? 5-fold
+# set.seed(1)
+# ?kmeans
+# 
+# names(va)[2]="arousal"
+# 
+# 
+# K=5
+# B=5
+# nums <- rep(1:B, each = nrow(va)/B)
+# fold <- sample(nums)
+# 
+#   for (j in 1:B){
+#     test = va[fold==j,]
+#     train = va[fold!=j,]
+#     km = kmeans(train,centers = k)
+#     n.test <- nrow(test)
+#     predictions <- rep(NA, n.test)
+#     for (i in 1:n.test){
+#        newp <- as.numeric(test[i, ])
+#        predictions[i] <- predict(km, newp)
+#        Dir = train$Direction)
+#     }
+#     fold.error[j] <- mean(predictions != test$Direction)
+#   }
+# 
+# 
+# ?kmeans
+```
+
+#dictionary fast count
+```{r}
+lexicon = c("greatest" ,"glory" , "rising")
+sen = "Our greatest greatest glory is not in never falling, but in rising every time we fall #confucius #entrepreneurship"
+wordss = strsplit(sen," ")
+
+sum(wordss[[1]] %in% lexicon) #returns the number of words that matches lexicon
+
+cd<-function(df){
+  return(sum(wd %in% as.vector(df[,1])))
+}
+
+d_c=sapply(dict_list, FUN = cd)
+dict_count
+d_c
+
+
+class(dict_list[[1]])
+head(as.vector(dict_list[[1]][,1]))
+
+dict_count
+```
