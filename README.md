@@ -12,7 +12,7 @@ Term: Fall 2018
 + Projec title: Secrets to Happiness from the Crowd
 + This project is conducted by Huiming Xie
 
-+ Project summary: [a short summary] Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++ Project summary: [a short summary] In this project, generally 2 questions are explored in HappyDB: What makes different (demographic) groups of people happy and the variety of happiness interms of valency, arousal and dominance - the measures of emotions that will be introduced in the report. The main method is utilizing the predicted categories of the happy moments to compare the proportions between groups. Some Word and sentence examples are also provided.
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
