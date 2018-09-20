@@ -1,5 +1,6 @@
 ---
 title: "Secrets to Happiness from the Crowd"
+output: html_notebook
 ---
 
 ![](../figs/sunflowers.jpg)
