@@ -48,7 +48,7 @@ library(ggfortify)
 ```
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# load data for use
+## load data for use
 hm_data = read_csv("../output/processed_moments.csv")
 
 urlfile = 'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/data/demographic.csv'
@@ -61,7 +61,7 @@ urladr = 'https://raw.githubusercontent.com/rit-public/HappyDB/master/happydb/da
 ```
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# combine two data sets and keep the columns needed
+## combine two data sets and keep the columns needed
 hm_data = hm_data %>%
   inner_join(demo_data, by = "wid") %>%
   select(hmid,
@@ -86,7 +86,7 @@ hm_data = hm_data %>%
 ```
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# Create a bag of words using the text data
+## create a bag of words using the text data
 bag_of_words =  hm_data %>%
   unnest_tokens(word, text)
 
@@ -99,7 +99,7 @@ word_count = bag_of_words %>%
 
 At first glance, "friend", "day" and "time" are by far the most frequent words mentioned by people in their happy moments. It appears that these words have some influence on our happiness. Maybe this somehow points out the importance of saying to our friends "Have a good time/day." 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-#produce a word cloud
+## produce a word cloud
 set.seed(1)
 wordcloud2(data = word_count[1:100,], shape = 'star', size = 0.6, backgroundColor = "lightsalmon" )
 
@@ -115,7 +115,7 @@ To answer the question, let's categorize the happy moments into 6 groups, namely
 \newline
 \newline
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# plot a pie chart of predicted category frequency
+## plot a pie chart of predicted category frequency
 pred_cat = hm_data[,c(4:7,9,11)]
 pred_cat$predicted_category = factor(hm_data$predicted_category, 
                                      levels = rev(c("achievement", "affection", "bonding",
@@ -154,10 +154,11 @@ While the overall pattern is quite clearcut, a comparison between groups only ma
 + The reflection period is not a feature to separate groups of people but can really affect your pondering on the happy moments. Achievement and affection are more likely to yield result in a longer period of time, and they are more macroscopic and influential than the comparatively more ephemeral feelings associated with bonding, enjoying the moment and leisure when we look back at a certain stage of our life.
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-#bar charts: comparisons of category frequency in different groups
+## bar charts: comparisons of category frequency in different groups
 atrs = c("gender", "marital", "parenthood", "reflection_period")
 temp0 = list()
 
+# combining groups of data of counts into a list
 sql_cat = list()
 for (i in 1:length(atrs)){
   sql_cat[[i]] = pred_cat%>%
@@ -165,6 +166,7 @@ for (i in 1:length(atrs)){
                    group_by(!!as.symbol(atrs[i]),predicted_category)
 }
 
+# special treatment for the attribute "country"
 sql_cat[[5]] = pred_cat%>%
   dplyr::count(country,predicted_category)%>%
   group_by(country,predicted_category)%>%
@@ -173,6 +175,7 @@ sql_cat[[5]] = pred_cat%>%
 atrs[5]="country"
 names(sql_cat)=atrs
 
+# quick function for division
 divi = function(vec,df){
   vec1 = as.vector(vec)
   if (as.character(vec1[1])==as.character(df[1,1])){
@@ -183,6 +186,8 @@ divi = function(vec,df){
   }
   return(vec1[3])
 }
+
+# quick function to compute proportions
 cnt_to_prop = function(df){
   df = data.frame(df)
   df_sum = df%>%
@@ -194,12 +199,8 @@ cnt_to_prop = function(df){
   names(df)[3]="proportion"
   return(df)
 }
-gen = data.frame(sql_cat[[1]])
 
-ttt = data.frame(data.frame(sql_cat[[1]])%>%
-    group_by(gender)%>%
-    dplyr::summarise(total = sum(n)))
-    
+# bar plot quick function    
 bi_cat = function(df){
   df = cnt_to_prop(df)
   ggplot(data=df, aes(x=!!as.symbol(names(df)[2]),y=!!as.symbol(names(df)[3])))+
@@ -225,7 +226,7 @@ Different from the above four features of gender, marital status, parenthood and
 It is interesting that even in different countries, the distributions of categories of happy moments differ. Americans find more happiness in achievement, nature and exercise, while indians emphasize affection, bonding, enjoying the moment and leisure more. The distinction of individualism in the US and family-orientation in India reveals itself. Isn't it wonderful that we can actually get a taste of the cultural differences simply from data mining in the happy moments people describe?
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-#bar chart: comparisons of category frequency in USA and IND
+# bar chart: comparisons of category frequency in USA and IND
 bi_cat(sql_cat[[5]])
 ```
 
@@ -238,8 +239,7 @@ The VAD model has been applied to each happy moment for evaluation, with valency
 
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-
-# combine happy moments data with vad data
+## combine happy moments data with vad data
 hm_data = hm_data %>%
   inner_join(vad_data, by = "hmid") %>%
   select(hmid,
@@ -266,7 +266,7 @@ Both dominance(control) and valency(pleasantness) spread around the score of 5 t
 \newline
 \newline
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# scatter plot of dominance against valency and the regression fitting line
+## scatter plot of dominance against valency and the regression fitting line
 ggplot(data=hm_data)+
   geom_jitter(aes(x=valency, y=dominance), size =0.1, color = "antiquewhite4")+
   stat_smooth(data=subset(hm_data, valency>4 & valency <8),aes(x=valency, y=dominance),method = "lm", formula = y ~ x, size = 1)+
@@ -275,7 +275,7 @@ ggplot(data=hm_data)+
 
 However, the case is more obscure for that between valency and arousal(intensity). It doesn't seem that the more pleasant it is, the more intense it is, but that arousal could be higher for both high and low valency, and the majority of the happy moments share a neutral or even lower arousal(around 4.2). As a matter of fact, the simplified shape of the scatter plot is kind of quadratic, making the regression fitting curve look like a "smile". But how come? Without using any advanced models, we can make a rudimentary division among the scattered points according to their locations. Though not rigorous, it doesn't hurt to collect more information from as convenient a tool as we have.
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# scatter plot of arousal against valency and the regression fitting curve
+## scatter plot of arousal against valency and the regression fitting curve
 ggplot(data=hm_data)+
   geom_jitter(aes(x=valency, y=arousal), size =0.1, color = "tomato")+
   stat_smooth(data=subset(hm_data, valency>4 & valency <8),aes(x=valency, y=arousal),method = "lm", formula = y ~ x + I(x^2), size = 1, color = "white")+
@@ -289,18 +289,28 @@ ggplot(data=hm_data)+
 ###Category Analysis in VAD with Subjective Groups
 Here we create 3 subjective groups with 1 representing those happy moments with roughly high valency and high arousal, 2 wtih medium valency and low arousal and 3 with relatively low valency and not as low arousal. The groups are divided using K-means clustering. Again, there is not much scientific basis in this grouping as it can be easily eyeballed that there is certainly only one cluster. But the effect will be displayed as follows.
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# 3-Means Cluster Analysis
+##Put valency-arousal data into 3 groups for exploration
+
+# tidy up and rearrange vad data
 vad_data = data.frame(vad_data)
 vad_data = cbind(vad_data[,1:2],vad_data$arousal,vad_data$dominance)
-vad_ori = stats::na.omit(vad_data)
+
+# keep the original unscaled vad data for plotting
+vad_ori = stats::na.omit(vad_data) 
 vad = vad_ori
+
+# scaling for kmeans algorithm
 vad[,2:4]= scale(vad_ori[,2:4])
 hmid_vad = vad[,1]
 va = vad[,2:3]
+
+# 3-Means Cluster Analysis
 set.seed(1)
 fit = kmeans(va, 3)
 km_vad = data.frame(vad_ori, fit$cluster)
 names(km_vad)[3:5] = c("arousal","dominance","subjective_group")
+
+# reorer groups for clear illustration later
 km_vad[which(km_vad[,5]==2),5]=0
 km_vad[which(km_vad[,5]==1),5]=2
 km_vad[which(km_vad[,5]==0),5]=1
@@ -316,12 +326,15 @@ ggplot(data = km_vad,aes(x=valency,y=arousal))+
 For each group, it won't hurt to analyze their category component separately. Surprisingly, there is a pattern. Though appearing most frequent in the crowd, achievement usually comes along with the lower valency and affection the opposite. It may be that although the path to success of one thing is tough, unpleasant and anti-instinct, the good result that comes with it makes such a big contrast that people actually get the most happiness out of it and the intensity can even be higher than a majority part of other kinds of happiness.
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-#bar chart: comparison of proportion of categories in each subjective group
+## bar chart: comparison of proportion of categories in each subjective group
+
+# retain category and group data for use
 cat_vad = hm_data%>%
   inner_join(km_vad, by="hmid")%>%
   select(hmid,
          predicted_category,
          subjective_group)
+
 cat_vad_cnt = data.frame(cat_vad%>%
   group_by(subjective_group)%>%
   dplyr::count(predicted_category))
@@ -329,12 +342,15 @@ cat_vad_cnt = data.frame(cat_vad%>%
 cat_vad_cnt[,1]=factor(cat_vad_cnt[,1])
 cnt_lst = split(cat_vad_cnt, f=cat_vad_cnt$subjective_group)
 cnt_df = NULL
+
+# convert count to proportion
 for(i in 1:3){
   cnt_lst[[i]]$proportion = round(cnt_lst[[i]]$n/sum(cnt_lst[[i]]$n),4)
   cnt_lst[[i]] = cnt_lst[[i]][,-3]
   names(cnt_lst[[i]])[1]="group"
   cnt_df = rbind(cnt_df, cnt_lst[[i]])
 }
+
 cnt_df$predicted_category = factor(cnt_df$predicted_category, levels = rev(c("achievement", "affection", "bonding", "enjoy_the_moment","leisure","nature","exercise")))
 
 ggplot(data = cnt_df, aes(x=predicted_category,y=proportion,fill=group))+
@@ -351,14 +367,14 @@ Nevertheless, our curiosity cannot be satisfied if we stop the analysis here. A 
 Group 1, with high valency and arousal, tends to be those really pleasant and exciting activities in our common sense. These are usually the ordinary kind of happiness that we can immediately think about.
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# extract the 5 sentences with the highest valency
+## extract the 5 sentences with the highest valency
 high_val=  head(hm_data[order(hm_data$valency,decreasing = TRUE),]$original_hm,5)
 high_val
 ```
 
 Take a glimpse at Group 2 - medium valency and low arousal, and you can actually get touched somehow. These are the moments that are so quiet and delicate that you need to have a peaceful and undisturbed mind to feel it. But there is no denying that these take on an alternative from of happiness other than that arise from an vacation.
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# extract the 5 sentences with the lowest arousal
+## extract the 5 sentences with the lowest arousal
 low_aro = head(hm_data[order(hm_data$arousal,decreasing = FALSE),]$original_hm,5)
 low_aro
 ```
@@ -366,7 +382,7 @@ low_aro
 Finally, Group 3 - low valency and medium arousal, seems to be as a whole born out of pain. The escape from a bad status (please ignore the fact that the 1st sentence is a sick extreme), while it sounds pathetic, is indeed a milestone for people in the situations. Think about it. Sometimes lowering our expectations can bring us additional surprise. Also, no achievement that can bring us happiness comes at ease - no pains, no gains.
 
 ```{r warning=FALSE, message=FALSE,echo=FALSE}
-# extract the 5 sentences with the lowest valency
+## extract the 5 sentences with the lowest valency
 low_val = head(hm_data[order(hm_data$valency,decreasing = FALSE),]$original_hm,5)
 low_val
 ```
